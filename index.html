@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>鏡像魔方 3D 解法</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/three.module.min.js",
+  "three/addons/": "./vendor/three/addons/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>鏡像魔方 3×3 · 3D 解法</h1>
+  <p class="sub">拖曳旋轉視角 · 滾輪縮放 · 鍵盤 U D L R F B 轉動（Shift = 逆時針）</p>
+</header>
+
+<main>
+  <section id="viewer-wrap">
+    <div id="viewer"></div>
+    <div id="move-banner" aria-live="polite"></div>
+    <div class="view-tools">
+      <label class="toggle"><input type="checkbox" id="hint"> 顏色提示</label>
+      <label class="toggle"><input type="checkbox" id="labels" checked> 面標籤</label>
+    </div>
+  </section>
+
+  <aside id="panel">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="play" role="tab">操作與求解</button>
+      <button class="tab" data-tab="learn" role="tab">教學（7 步）</button>
+    </nav>
+
+    <div class="tab-body" id="tab-play">
+      <div class="card">
+        <h2>打亂</h2>
+        <div class="row">
+          <button id="btn-scramble" class="primary">隨機打亂</button>
+          <button id="btn-reset">復原</button>
+        </div>
+        <div class="row">
+          <input id="scramble-input" type="text" placeholder="輸入打亂公式，例如 R U R' U' F2">
+          <button id="btn-apply">套用</button>
+        </div>
+        <p id="scramble-text" class="mono small"></p>
+      </div>
+
+      <div class="card">
+        <h2>手動轉動</h2>
+        <div class="move-grid" id="move-grid"></div>
+      </div>
+
+      <div class="card">
+        <h2>求解</h2>
+        <div class="row">
+          <button id="btn-solve" class="primary">計算解法（逐層法）</button>
+        </div>
+        <div class="player" id="player" hidden>
+          <div class="row controls">
+            <button id="p-start" title="回到開頭">⏮</button>
+            <button id="p-prev" title="上一步">◀</button>
+            <button id="p-play" class="primary" title="播放 / 暫停">▶ 播放</button>
+            <button id="p-next" title="下一步">▶</button>
+            <button id="p-end" title="跳到結尾">⏭</button>
+          </div>
+          <div class="row">
+            <label class="small">速度 <input type="range" id="speed" min="0.3" max="3" step="0.1" value="1"></label>
+            <span id="progress" class="small mono"></span>
+          </div>
+          <ol id="solution" class="solution"></ol>
+        </div>
+        <p id="solve-msg" class="small"></p>
+      </div>
+    </div>
+
+    <div class="tab-body" id="tab-learn" hidden>
+      <div class="card">
+        <h2>先認識鏡像魔方</h2>
+        <p>鏡像魔方（Mirror Cube）的內部構造和一般 3×3 魔方一樣，只是每一層的厚度都不同，而且所有面都是同一種顏色。
+          所以它是以<strong>「形狀」</strong>取代顏色：當每一層的厚度和高度都對齊時，它就會變回一個完整的長方體。</p>
+        <ul>
+          <li><strong>中心塊</strong>：6 個中心塊高度各不相同，永遠不會移動，代表每一面的「顏色」。</li>
+          <li><strong>邊塊／角塊</strong>：判斷是否歸位，要看它的表面是否和相鄰中心塊的表面<strong>齊平</strong>。</li>
+          <li>開啟右上角「顏色提示」，可以看到每塊原本屬於哪一面，學習時很有幫助。</li>
+          <li>沒有特殊的「奇偶校驗」問題，用一般 3×3 的逐層法就能完成。</li>
+        </ul>
+        <p class="small">下方每一步都有「示範」按鈕：會在 3D 魔方上先擺出該情況，再一步一步播放公式。</p>
+      </div>
+      <div id="lessons"></div>
+    </div>
+  </aside>
+</main>
+
+<footer class="small">轉動記號：U 上、D 下、R 右、L 左、F 前、B 後；加 ' 為逆時針，加 2 為轉 180°。</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
