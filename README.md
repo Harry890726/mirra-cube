@@ -24,3 +24,8 @@ python3 -m http.server 8000
 - `js/app.js`：Three.js 場景、動畫、播放器與教學
 - `js/cube-core.js`：魔方狀態模型與逐層法求解器（可在 Node 中測試）
 - `vendor/three/`：Three.js r160（MIT）
+
+## 線上版（GitHub Pages）
+`.github/workflows/pages.yml` 會在推送時自動部署。第一次需要到
+**Settings → Pages → Build and deployment → Source** 選擇 **GitHub Actions**。
+網址：https://harry890726.github.io/mirra-cube/
