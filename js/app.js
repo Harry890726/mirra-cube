@@ -185,6 +185,7 @@ const scrambleText = $('scramble-text');
 const solveMsg = $('solve-msg');
 
 function manualMove(m) {
+  if (inputMode) return;
   clearPlayer();
   enqueue(m, () => history.push(m));
 }
@@ -196,6 +197,7 @@ for (const suffix of ['', "'", '2']) for (const f of ['U', 'D', 'L', 'R', 'F', '
   grid.appendChild(b);
 }
 document.addEventListener('keydown', e => {
+  if (inputMode) return;
   if (e.target.closest('input, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
   const f = e.key.toUpperCase();
   if ('UDLRFB'.includes(f) && f.length === 1) { manualMove(e.shiftKey ? f + "'" : f); e.preventDefault(); }
@@ -251,6 +253,10 @@ $('btn-solve').onclick = () => {
   if (Core.isSolved(state)) { clearPlayer(); solveMsg.textContent = '魔方已經是復原狀態，先打亂看看吧！'; return; }
   let stages;
   try { stages = Core.solve(state); } catch (err) { solveMsg.textContent = err.message; return; }
+  showSolution(stages);
+};
+
+function showSolution(stages) {
   player.base = history.slice();
   player.moves = [];
   player.pos = 0;
@@ -431,11 +437,131 @@ function demo(moves, toks) {
     () => { toks.forEach(t => (t.style.color = '')); toks[i].style.color = 'var(--accent)'; }));
 }
 
-// 分頁
-document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
-  $('tab-play').hidden = tab.dataset.tab !== 'play';
-  $('tab-learn').hidden = tab.dataset.tab !== 'learn';
+// ---------------- 輸入我的魔方 ----------------
+let inputMode = false;
+let brush = 0;
+const edState = new Uint8Array(54).fill(Core.EMPTY_COLOR);
+const isCenter = fi => Core.FACELETS[fi].p.filter(Boolean).length === 1;
+const resetEditor = () => Core.FACELETS.forEach((f, i) => { edState[i] = isCenter(i) ? f.face : Core.EMPTY_COLOR; });
+resetEditor();
+const emptyMat = new THREE.MeshStandardMaterial({ color: 0x55524c, metalness: 0, roughness: 0.8 });
+const FACE_NAMES = { U: '上', R: '右', F: '前', D: '下', L: '左', B: '後' };
+const hex = c => '#' + c.toString(16).padStart(6, '0');
+
+// 建立調色盤與展開圖
+const palette = $('palette');
+const swatches = Core.FACES.map((f, ci) => {
+  const b = document.createElement('button');
+  b.className = 'swatch';
+  b.innerHTML = `<i style="background:${hex(HINT_COLORS[f])}"></i>${f}<small></small>`;
+  b.onclick = () => { brush = ci; refreshEditor(); };
+  palette.appendChild(b);
+  return b;
 });
+const NET_ORIGIN = { U: [0, 3], L: [3, 0], F: [3, 3], R: [3, 6], B: [3, 9], D: [6, 3] };
+const netEl = $('net');
+const cells = [];
+for (let row = 0; row < 9; row++) for (let col = 0; col < 12; col++) {
+  const face = Object.keys(NET_ORIGIN).find(f => {
+    const [r0, c0] = NET_ORIGIN[f];
+    return row >= r0 && row < r0 + 3 && col >= c0 && col < c0 + 3;
+  });
+  if (!face) { netEl.appendChild(document.createElement('span')); continue; }
+  const [r0, c0] = NET_ORIGIN[face];
+  const fi = Core.netFacelet(face, row - r0, col - c0);
+  const b = document.createElement('button');
+  b.className = 'cell';
+  b.dataset.fi = fi;
+  b.title = `${FACE_NAMES[face]}面 (${face})`;
+  if (isCenter(fi)) { b.classList.add('center'); b.textContent = face; }
+  else b.onclick = () => paint(fi);
+  netEl.appendChild(b);
+  cells.push(b);
+}
+
+function paint(fi) {
+  if (isCenter(fi)) return;
+  edState[fi] = edState[fi] === brush ? Core.EMPTY_COLOR : brush;   // 再點一次可清除
+  refreshEditor();
+}
+function setInMsg(text, cls = '') { const m = $('in-msg'); m.textContent = text; m.className = 'small ' + cls; }
+
+function refreshEditor() {
+  swatches.forEach((b, ci) => {
+    b.classList.toggle('active', ci === brush);
+    const n = edState.filter(x => x === ci).length;
+    b.querySelector('small').textContent = `${FACE_NAMES[Core.FACES[ci]]} ${n}/9`;
+  });
+  for (const b of cells) {
+    const c = edState[b.dataset.fi];
+    b.classList.toggle('empty', c === Core.EMPTY_COLOR);
+    b.style.background = c === Core.EMPTY_COLOR ? '' : hex(HINT_COLORS[Core.FACES[c]]);
+  }
+  if (!inputMode) return;
+  // 3D 預覽：方塊保持在原位，只換每一面的顏色
+  for (const c of cubies) {
+    const h = c.userData.home;
+    c.material = c.userData.outward.map((o, idx) => {
+      if (!o) return innerMat;
+      const col = edState[Core.faceletIndex([h.x, h.y, h.z], Core.NORMALS[BOX_FACES[idx]])];
+      return col === Core.EMPTY_COLOR ? emptyMat : hintMats[Core.FACES[col]];
+    });
+  }
+}
+
+function enterInput() {
+  if (inputMode) return;
+  flush(); clearPlayer();
+  inputMode = true;
+  for (const c of cubies) c.quaternion.identity();
+  refreshEditor();
+}
+function exitInput() {
+  if (!inputMode) return;
+  inputMode = false;
+  setHint($('hint').checked);
+  rebuild(history);
+}
+
+$('in-clear').onclick = () => { resetEditor(); setInMsg(''); refreshEditor(); };
+$('in-load').onclick = () => { edState.set(logicalState()); setInMsg(''); refreshEditor(); };
+$('in-solve').onclick = () => {
+  if (Core.isSolved(edState)) { setInMsg('這是已經復原的狀態。', 'msg-ok'); return; }
+  let stages;
+  try { stages = Core.solve(edState); } catch (err) { setInMsg(err.message, 'msg-error'); return; }
+  const moves = stages.flatMap(st => st.steps.flatMap(s => s.moves));
+  inputMode = false;
+  setHint($('hint').checked);
+  rebuild(Core.invertAlg(moves));          // 讓 3D 魔方變成你輸入的狀態
+  scrambleText.textContent = '已載入你輸入的魔方狀態';
+  setInMsg('');
+  showTab('play');
+  showSolution(stages);
+};
+
+// 在 3D 模型上直接點選（拖曳則是旋轉視角）
+const raycaster = new THREE.Raycaster();
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', e => {
+  if (!inputMode || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  raycaster.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const hit = raycaster.intersectObjects(cubies, false)[0];
+  if (!hit) return;
+  const c = hit.object, idx = hit.face.materialIndex;
+  if (!c.userData.outward[idx]) return;
+  const h = c.userData.home;
+  paint(Core.faceletIndex([h.x, h.y, h.z], Core.NORMALS[BOX_FACES[idx]]));
+});
+refreshEditor();
+
+// 分頁
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  for (const id of ['play', 'input', 'learn']) $('tab-' + id).hidden = id !== name;
+  if (name === 'input') enterInput(); else exitInput();
+}
+document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => showTab(tab.dataset.tab));
 
 resize();

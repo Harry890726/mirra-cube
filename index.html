@@ -31,6 +31,7 @@
   <aside id="panel">
     <nav class="tabs" role="tablist">
       <button class="tab active" data-tab="play" role="tab">操作與求解</button>
+      <button class="tab" data-tab="input" role="tab">輸入我的魔方</button>
       <button class="tab" data-tab="learn" role="tab">教學（7 步）</button>
     </nav>
 
@@ -73,6 +74,32 @@
           <ol id="solution" class="solution"></ol>
         </div>
         <p id="solve-msg" class="small"></p>
+      </div>
+    </div>
+
+    <div class="tab-body" id="tab-input" hidden>
+      <div class="card">
+        <h2>把你手上的魔方輸入進來</h2>
+        <ol class="steps">
+          <li><strong>拿定方向</strong>：決定哪一面朝上、哪一面朝前，輸入過程中<strong>不要改變拿法</strong>。
+            網頁的 U 上、D 下、F 前、B 後、R 右、L 左，就是你現在手上的方向。</li>
+          <li><strong>用厚度辨認</strong>：鏡像魔方的 6 個中心塊厚度都不同。看每一格從最近的切割溝槽到表面有多厚，
+            <strong>跟哪一個中心塊一樣厚，它就屬於那一面</strong>。顏色只是標記，用來區分 6 種厚度。</li>
+          <li><strong>填格子</strong>：先在下方選一面，再點展開圖的格子，或直接點 3D 模型上的面（可以拖曳旋轉來看背面）。</li>
+          <li>全部填完後按「計算解法」，再跟著播放一步一步轉。</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>選擇要填的面</h2>
+        <div class="palette" id="palette"></div>
+        <div class="net" id="net"></div>
+        <p class="small">展開圖：U 是從上往下看（前面在下方），D 是從下往上看（前面在上方），四個側面都是上方朝上。</p>
+        <div class="row">
+          <button id="in-clear">清空</button>
+          <button id="in-load" title="把目前 3D 魔方的狀態放進展開圖">載入目前 3D 狀態</button>
+          <button id="in-solve" class="primary">計算解法</button>
+        </div>
+        <p id="in-msg" class="small"></p>
       </div>
     </div>
 

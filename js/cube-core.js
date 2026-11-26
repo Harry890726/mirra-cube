@@ -155,12 +155,30 @@ export const STAGE_INFO = [
 
 const FACE_AXIS = f => 'UDRLFB'.indexOf(f) >> 1;
 
+const STAGE_ERRORS = {
+  corners: '有角塊的三個面組合不可能（可能輸入錯誤）。',
+  ucross: '有一個邊塊方向被翻轉了：可能是輸入錯誤，或魔方曾被拆開後裝錯。',
+  uedges: '有兩個方塊的位置對調了：可能是輸入錯誤，或魔方曾被拆開後裝錯。',
+  ucorners: '有兩個方塊的位置對調了：可能是輸入錯誤，或魔方曾被拆開後裝錯。',
+  orient: '有一個角塊被單獨扭轉了：可能是輸入錯誤，或角塊曾被扭過（鏡像魔方很容易被扭到）。',
+};
+
 export function solve(start) {
+  const err = validate(start);
+  if (err) throw new Error(err);
+  let current = 'cross';
+  try { return solveStages(start, s => { current = s; }); }
+  catch (e) { throw new Error(STAGE_ERRORS[current] || e.message); }
+}
+
+function solveStages(start, setStage) {
+  let current;
   let state = Uint8Array.from(start);
   const stages = [];
   const keep = [];
   const add = (id, steps) => stages.push({ ...STAGE_INFO.find(s => s.id === id), steps });
 
+  setStage(current = 'cross');
   // 1. 底層十字：逐一以 18 種單步轉動搜尋
   {
     const single = MOVES.map(m => macro(m, m));
@@ -176,6 +194,7 @@ export function solve(start) {
     add('cross', steps);
   }
 
+  setStage(current = 'corners');
   // 2. 底層角塊
   {
     const slotFace = { DFR: 'R', DRB: 'B', DBL: 'L', DLF: 'F' };
@@ -194,6 +213,7 @@ export function solve(start) {
     add('corners', steps);
   }
 
+  setStage(current = 'middle');
   // 3. 中層邊塊
   {
     const macros = [...U_MACROS];
@@ -215,6 +235,7 @@ export function solve(start) {
   const uEdges = ['UF', 'UR', 'UB', 'UL'];
   const uCorners = ['UFR', 'URB', 'UBL', 'ULF'];
 
+  setStage(current = 'ucross');
   // 4. 頂層十字（只看頂面）
   {
     const topIdx = uEdges.map(e => pieceFacelets(e)[0]);
@@ -224,6 +245,7 @@ export function solve(start) {
     add('ucross', toSteps(r.path)); state = r.state;
   }
 
+  setStage(current = 'uedges');
   // 5. 頂層邊塊歸位
   {
     const goalIdx = keep.concat(...uEdges.map(pieceFacelets));
@@ -233,6 +255,7 @@ export function solve(start) {
     keep.push(...uEdges.flatMap(pieceFacelets));
   }
 
+  setStage(current = 'ucorners');
   // 6. 頂層角塊歸位（只看位置，不看方向）
   {
     const cornerOk = s => uCorners.every(c => {
@@ -246,6 +269,7 @@ export function solve(start) {
     add('ucorners', toSteps(r.path)); state = r.state;
   }
 
+  setStage(current = 'orient');
   // 7. 頂層角塊翻轉（初級法：固定在 UFR 重複 R' D' R D）
   {
     const steps = [];
@@ -261,7 +285,7 @@ export function solve(start) {
     for (let i = 0; i < 4; i++) {
       let k = 0;
       let s = state;
-      while (s[uFacelet] !== 0) { s = applyMoves(s, sexy); k++; }
+      while (s[uFacelet] !== 0) { if (k >= 5) throw new Error('twist'); s = applyMoves(s, sexy); k++; }
       if (k) {
         flushU();
         steps.push({ label: k === 1 ? "R' D' R D" : `(R' D' R D) ×${k}`, moves: Array(k).fill(sexy).flat() });
@@ -280,4 +304,55 @@ export function solve(start) {
 
   if (!isSolved(state)) throw new Error('求解失敗');
   return stages;
+}
+
+// ---------------- 輸入驗證 ----------------
+const EMPTY = 255;
+const OPP = [3, 4, 5, 0, 1, 2]; // U<->D, R<->L, F<->B
+const EDGE_POS = ['UF', 'UR', 'UB', 'UL', 'DF', 'DR', 'DB', 'DL', 'FR', 'FL', 'BR', 'BL'];
+const CORNER_POS = ['UFR', 'URB', 'UBL', 'ULF', 'DRF', 'DFL', 'DLB', 'DBR'];
+const fname = c => FACES[c];
+
+// 回傳錯誤訊息（中文）或 null
+export function validate(state) {
+  const empty = state.filter(c => c === EMPTY).length;
+  if (empty) return `還有 ${empty} 格沒有填。`;
+  for (let c = 0; c < 6; c++) {
+    const n = state.filter(x => x === c).length;
+    if (n !== 9) return `${fname(c)} 面的格子有 ${n} 個，應該剛好 9 個。`;
+  }
+  const seen = new Map();
+  for (const pos of EDGE_POS) {
+    const cs = pieceFacelets(pos).map(i => state[i]);
+    if (cs[0] === cs[1] || OPP[cs[0]] === cs[1]) return `${pos} 位置的邊塊是 ${cs.map(fname).join('+')}，這種邊塊不存在。`;
+    const k = cs.slice().sort().join();
+    if (seen.has(k)) return `有兩個相同的邊塊（${cs.map(fname).join('+')}），在 ${seen.get(k)} 和 ${pos}。`;
+    seen.set(k, pos);
+  }
+  for (const pos of CORNER_POS) {
+    const cs = pieceFacelets(pos).map(i => state[i]);
+    const bad = cs.some((a, i) => cs.some((b, j) => i < j && (a === b || OPP[a] === b)));
+    if (bad) return `${pos} 位置的角塊是 ${cs.map(fname).join('+')}，這種角塊不存在。`;
+    const k = cs.slice().sort().join();
+    if (seen.has(k)) return `有兩個相同的角塊（${cs.map(fname).join('+')}），在 ${seen.get(k)} 和 ${pos}。`;
+    seen.set(k, pos);
+  }
+  return null;
+}
+export const EMPTY_COLOR = EMPTY;
+
+// 平面展開圖：第 r 列、第 c 行 → 貼面索引
+// U 從上方看（後面在上）、D 從下方看（前面在上）、側面都是上面朝上
+const NET_AXES = {
+  U: { right: [1, 0, 0], up: [0, 0, -1] },
+  D: { right: [1, 0, 0], up: [0, 0, 1] },
+  F: { right: [1, 0, 0], up: [0, 1, 0] },
+  B: { right: [-1, 0, 0], up: [0, 1, 0] },
+  R: { right: [0, 0, -1], up: [0, 1, 0] },
+  L: { right: [0, 0, 1], up: [0, 1, 0] },
+};
+export function netFacelet(face, r, c) {
+  const n = NORMALS[face], { right, up } = NET_AXES[face];
+  const p = [0, 1, 2].map(k => n[k] + (c - 1) * right[k] + (1 - r) * up[k]);
+  return faceletIndex(p, n);
 }
